@@ -20,6 +20,9 @@ namespace M101DotNet.WebApp.Controllers
             // XXX WORK HERE
             // find the most recent 10 posts and order them
             // from newest to oldest
+            var recentPosts = await blogContext.Posts.Find(new BsonDocument())
+                .Sort(new BsonDocument("CreatedAtUtc", -1))
+                .ToListAsync();
 
             var model = new IndexModel
             {
@@ -46,6 +49,16 @@ namespace M101DotNet.WebApp.Controllers
             var blogContext = new BlogContext();
             // XXX WORK HERE
             // Insert the post into the posts collection
+            Post post = new Post();
+            post.Author = User.Identity.Name;
+            post.Title = model.Title;
+            post.Content = model.Content;
+            post.Tags = model.Tags.Split(',').ToList();
+            post.CreatedAtUtc = DateTime.Now;
+            post.Comments = new List<Comment>();
+
+            await blogContext.Posts.InsertOneAsync(post);
+
             return RedirectToAction("Post", new { id = post.Id });
         }
 
@@ -56,6 +69,7 @@ namespace M101DotNet.WebApp.Controllers
 
             // XXX WORK HERE
             // Find the post with the given identifier
+            var post = await blogContext.Posts.Find(p => p.Id == new ObjectId(id)).SingleOrDefaultAsync();
 
             if (post == null)
             {
@@ -79,6 +93,10 @@ namespace M101DotNet.WebApp.Controllers
             // Find all the posts with the given tag if it exists.
             // Otherwise, return all the posts.
             // Each of these results should be in descending order.
+            var filter = tag == null 
+                ? new BsonDocument() 
+                : Builders<Post>.Filter.AnyEq(x => x.Tags, tag).ToBsonDocument();
+            var posts = await blogContext.Posts.Find(filter).ToListAsync();
 
             return View(posts);
         }
@@ -95,6 +113,17 @@ namespace M101DotNet.WebApp.Controllers
             // XXX WORK HERE
             // add a comment to the post identified by model.PostId.
             // you can get the author from "this.User.Identity.Name"
+            var post = await blogContext.Posts
+                .Find(p => p.Id == new ObjectId(model.PostId)).SingleOrDefaultAsync();
+
+            var comment = new Comment();
+            comment.Author = this.User.Identity.Name;
+            comment.Content = model.Content;
+            comment.CreatedAtUtc = DateTime.Now;
+
+            post.Comments.Add(comment);
+            await blogContext.Posts
+                .ReplaceOneAsync(new BsonDocument("_id", new ObjectId(model.PostId)), post);
 
             return RedirectToAction("Post", new { id = model.PostId });
         }
